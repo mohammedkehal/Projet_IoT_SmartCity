@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="fr" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartCity Supervisor | Master IoT</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        :root {
+            --primary-color: #0d6efd;
+            --success-color: #198754;
+            --danger-color: #dc3545;
+            --bg-dark: #121212;
+            --card-bg: #1e1e1e;
+            --chat-bg: #2b2b2b;
+        }
+        body { background-color: var(--bg-dark); font-family: 'Segoe UI', sans-serif; overflow-x: hidden; }
+        .card { background-color: var(--card-bg); border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.3); margin-bottom: 20px; transition: transform 0.2s; }
+        .card:hover { transform: translateY(-2px); }
+        .sidebar { height: 100vh; position: fixed; top: 0; left: 0; width: 250px; background-color: #1a1a1a; padding: 20px; border-right: 1px solid #333; z-index: 1000; }
+        .main-content { margin-left: 250px; padding: 30px; display: none; } /* Caché par défaut, géré par JS */
+        .active-section { display: block; animation: fadeIn 0.5s; }
+        
+        .nav-link { cursor: pointer; border-radius: 5px; margin-bottom: 5px; transition: all 0.3s; }
+        .nav-link:hover, .nav-link.active { background-color: rgba(13, 110, 253, 0.2); color: #fff !important; }
+        
+        .status-dot { height: 10px; width: 10px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+        .dot-on { background-color: var(--success-color); box-shadow: 0 0 10px var(--success-color); }
+        .dot-off { background-color: #666; }
+        
+        .metric-value { font-size: 2rem; font-weight: bold; }
+        .metric-label { font-size: 0.9rem; color: #aaa; }
+        .ai-badge { animation: pulse 2s infinite; }
+        
+        /* Styles du Chatbot */
+        .chat-container { height: 500px; display: flex; flex-direction: column; background-color: var(--chat-bg); border-radius: 10px; border: 1px solid #444; }
+        .chat-messages { flex: 1; overflow-y: auto; padding: 20px; }
+        .message { margin-bottom: 15px; max-width: 80%; padding: 10px 15px; border-radius: 15px; font-size: 0.95rem; }
+        .bot-msg { background-color: #333; color: #eee; border-top-left-radius: 2px; align-self: flex-start; }
+        .user-msg { background-color: var(--primary-color); color: white; border-top-right-radius: 2px; align-self: flex-end; margin-left: auto; }
+        .chat-input-area { padding: 15px; background-color: #222; border-top: 1px solid #444; border-radius: 0 0 10px 10px; }
+        
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .spin-anim { animation: spin 1s linear infinite; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar d-flex flex-column">
+        <h3 class="mb-4"><i class="bi bi-cpu-fill text-primary"></i> SmartCity<span class="fs-6 text-muted">AI</span></h3>
+        <ul class="nav flex-column mb-auto">
+            <li class="nav-item">
+                <a onclick="showSection('dashboard')" id="nav-dashboard" class="nav-link active text-white">
+                    <i class="bi bi-speedometer2 me-2"></i> Dashboard
+                </a>
+            </li>
+            <li class="nav-item">
+                <a onclick="showSection('ai')" id="nav-ai" class="nav-link text-white-50">
+                    <i class="bi bi-robot me-2"></i> Assistant IA
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="capteurs.html" class="nav-link text-white-50"><i class="bi bi-broadcast me-2"></i> Capteurs IoT</a>
+            </li>
+        </ul>
+        <div class="mt-auto p-3 bg-dark rounded">
+            <small class="text-muted">Système: </small><span class="text-success fw-bold">ONLINE</span><br>
+            <small class="text-muted">Moteur: </small><span class="text-info fw-bold">Python 3.10</span>
+        </div>
+    </div>
+
+    <div id="section-dashboard" class="main-content active-section">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2>Supervision Globale <span id="env-badge" class="badge fs-6 ms-2">Chargement...</span></h2>
+                <p class="text-muted">Vue temps réel de l'infrastructure urbaine</p>
+            </div>
+            <button class="btn btn-outline-primary" onclick="manualRefresh()">
+                <i id="refresh-icon" class="bi bi-arrow-clockwise"></i> Rafraîchir
+            </button>
+        </div>
+
+        <div class="row">
+            <div class="col-md-3">
+                <div class="card p-3">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <div class="metric-label">Lampadaires Actifs</div>
+                            <div class="metric-value text-primary" id="active-lamps">--</div>
+                        </div>
+                        <i class="bi bi-lightbulb fs-1 text-white-50"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card p-3">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <div class="metric-label">Consommation (W)</div>
+                            <div class="metric-value text-warning" id="total-conso">--</div>
+                        </div>
+                        <i class="bi bi-lightning-charge fs-1 text-white-50"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card p-3">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <div class="metric-label">Détection IA</div>
+                            <div class="metric-value text-danger" id="ai-alerts">0</div>
+                        </div>
+                        <i class="bi bi-eye fs-1 text-danger ai-badge"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card p-3">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <div class="metric-label">Zones</div>
+                            <div class="metric-value text-success">2</div>
+                        </div>
+                        <i class="bi bi-map fs-1 text-white-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card p-4">
+                    <h5 class="mb-3">📡 État des Lampadaires (API Live)</h5>
+                    <div class="table-responsive">
+                        <table class="table table-dark table-hover">
+                            <thead>
+                                <tr>
+                                    <th>ID / Zone</th>
+                                    <th>État / Intensité</th>
+                                    <th>Conso (W)</th>
+                                    <th>Trafic Local</th>
+                                    <th>Santé Système</th>
+                                </tr>
+                            </thead>
+                            <tbody id="lamp-table-body">
+                                <tr><td colspan="5" class="text-center text-muted">Connexion au Backend...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="card p-4">
+                    <h5 class="mb-3">🤖 Journal IA & Alertes</h5>
+                    <div id="alerts-container" style="max-height: 400px; overflow-y: auto;">
+                        <div class="text-muted small">Aucune anomalie détectée.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card p-4">
+                    <h5 class="mb-3"><i class="bi bi-graph-up text-primary"></i> Analyse Énergétique en Temps Réel</h5>
+                    <canvas id="consoChart" style="max-height: 250px;"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="section-ai" class="main-content">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2>Assistant Intelligent <span class="badge bg-primary fs-6 ms-2">BETA</span></h2>
+                <p class="text-muted">Interrogez le système en langage naturel</p>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card p-4 h-100">
+                    <h5>🛠️ Commandes Suggérées</h5>
+                    <p class="text-muted">Essayez de demander :</p>
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-outline-light text-start" onclick="sendQuickMsg('Quel est l\'état global ?')">📊 Quel est l'état global ?</button>
+                        <button class="btn btn-outline-light text-start" onclick="sendQuickMsg('Y a-t-il des pannes ?')">🚨 Y a-t-il des pannes ?</button>
+                        <button class="btn btn-outline-light text-start" onclick="sendQuickMsg('Quelle est la consommation actuelle ?')">⚡ Quelle est la consommation ?</button>
+                        <button class="btn btn-outline-light text-start" onclick="sendQuickMsg('Analyse le trafic routier')">🚗 Analyse le trafic routier</button>
+                    </div>
+                    <hr>
+                    <small class="text-muted">Ce chatbot utilise les données en temps réel de votre API FastAPI pour générer des réponses contextuelles.</small>
+                </div>
+            </div>
+            <div class="col-md-8">
+                <div class="chat-container">
+                    <div class="chat-messages" id="chat-messages">
+                        <div class="message bot-msg">
+                            Bonjour Zineb ! Je suis l'IA de supervision. Je surveille vos 2 zones et vos lampadaires. Comment puis-je vous aider ?
+                        </div>
+                    </div>
+                    <div class="chat-input-area d-flex">
+                        <input type="text" id="user-input" class="form-control bg-dark text-white border-secondary me-2" placeholder="Posez une question sur le système..." onkeypress="handleEnter(event)">
+                        <button class="btn btn-primary" onclick="sendMessage()"><i class="bi bi-send"></i></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/ai-dashboard.js"></script>
+
+</body>
+</html>
